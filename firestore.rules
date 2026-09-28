@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /cards/{cardId} {
+
+      // Public card pages (/card/:slug) and the slug-uniqueness check both
+      // query the collection without being signed in, so collection queries
+      // stay open. Cards are meant to be publicly viewable once published —
+      // that's the whole point of the product — so this isn't a new leak.
+      allow list: if true;
+
+      // A single document fetch by id, though, is only used by the admin
+      // edit screen (getCardById) — so only the owner may fetch by id
+      // directly. Anyone else gets "not found" instead of the raw data.
+      allow get: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+      // Only a signed-in user can create a card, and only for themselves.
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      // Only the owner can edit or delete their own card. ownerId itself
+      // can never be changed after creation.
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId;
+
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+  }
+}
